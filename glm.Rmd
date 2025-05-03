@@ -1,106 +1,188 @@
 ---
-title: "glm"
+title: "GLM Visualizations with brms"
 author: "Bahareh Jozranjbar"
 date: "2025-05-03"
 output: html_document
 ---
-```{r}
+
+```{r setup, include=FALSE}
 library(brms)
 library(tidyverse)
+install.packages("tidybayes", dependencies = TRUE, type = "binary")
 
-# Create a directory to save plots
+theme_set(theme_minimal())
+
 dir.create("glm_plots", showWarnings = FALSE)
 
-# Helper function to save ggplot
 save_plot <- function(plot, name) {
   ggsave(paste0("glm_plots/", name, ".png"), plot, width = 6, height = 4)
 }
+```
 
-# 1. Poisson Regression (Count Data)
+### 1. Poisson Regression
+
+```{r poisson}
 set.seed(1)
 df_poisson <- tibble(x = rnorm(100)) %>%
   mutate(y = rpois(100, lambda = exp(0.5 + 0.3 * x)))
 
 model_poisson <- brm(y ~ x, family = poisson(), data = df_poisson, chains = 2, iter = 1000)
+
+fitted_poisson <- model_poisson %>% 
+  add_fitted_draws(newdata = df_poisson, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_poisson <- ggplot(df_poisson, aes(x, y)) +
-  geom_point() +
-  geom_smooth(method = "glm", method.args = list(family = "poisson"), se = FALSE) +
+  geom_point(alpha = 0.6) +
+  geom_line(data = fitted_poisson, aes(x, pred), color = "red") +
   ggtitle("Poisson Regression")
 save_plot(plot_poisson, "poisson")
+```
 
-# 2. Logistic Regression (Binary Outcome)
+### 2. Logistic Regression
+
+```{r logistic}
 df_logistic <- tibble(x = rnorm(100)) %>%
   mutate(p = plogis(-0.5 + 1.5 * x),
          y = rbinom(100, 1, p))
 
 model_logistic <- brm(y ~ x, family = bernoulli(), data = df_logistic, chains = 2, iter = 1000)
+
+fitted_log <- model_logistic %>%
+  add_fitted_draws(newdata = df_logistic, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_logistic <- ggplot(df_logistic, aes(x, y)) +
-  geom_point(position = position_jitter(height = 0.05)) +
-  geom_smooth(method = "glm", method.args = list(family = "binomial"), se = FALSE) +
+  geom_jitter(height = 0.05, alpha = 0.5) +
+  geom_line(data = fitted_log, aes(x, pred), color = "red") +
   ggtitle("Logistic Regression")
 save_plot(plot_logistic, "logistic")
+```
 
-# 3. Negative Binomial (Overdispersion)
+### 3. Negative Binomial Regression
+
+```{r nb}
 df_nb <- tibble(x = rnorm(100)) %>%
   mutate(y = rnbinom(100, mu = exp(0.5 + 0.3 * x), size = 1))
 
 model_nb <- brm(y ~ x, family = negbinomial(), data = df_nb, chains = 2, iter = 1000)
+
+fitted_nb <- model_nb %>%
+  add_fitted_draws(newdata = df_nb, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_nb <- ggplot(df_nb, aes(x, y)) +
-  geom_point() +
+  geom_point(alpha = 0.6) +
+  geom_line(data = fitted_nb, aes(x, pred), color = "red") +
   ggtitle("Negative Binomial Regression")
 save_plot(plot_nb, "negative_binomial")
+```
 
-# 4. Gamma Regression (Skewed Duration)
+### 4. Gamma Regression
+
+```{r gamma}
 df_gamma <- tibble(x = rnorm(100)) %>%
   mutate(y = rgamma(100, shape = 2, rate = exp(-0.5 - 0.3 * x)))
 
 model_gamma <- brm(y ~ x, family = Gamma("log"), data = df_gamma, chains = 2, iter = 1000)
+
+fitted_gamma <- model_gamma %>%
+  add_fitted_draws(newdata = df_gamma, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_gamma <- ggplot(df_gamma, aes(x, y)) +
-  geom_point() +
+  geom_point(alpha = 0.6) +
+  geom_line(data = fitted_gamma, aes(x, pred), color = "red") +
   ggtitle("Gamma Regression")
 save_plot(plot_gamma, "gamma")
+```
 
-# 5. ExGaussian Regression (Skewed RT)
-df_exgauss <- tibble(x = rnorm(100)) %>%
-  mutate(y = rexgaussian(100, mu = 2 + x, sigma = 0.5, tau = 1))
+### 5. ExGaussian Regression
+
+```{r exgaussian}
+x <- rnorm(100)
+mu <- 2 + x
+sigma <- 0.5
+tau <- 1
+y <- rnorm(100, mean = mu, sd = sigma) + rexp(100, rate = 1 / tau)
+df_exgauss <- tibble(x = x, y = y)
 
 model_exgauss <- brm(y ~ x, family = exgaussian(), data = df_exgauss, chains = 2, iter = 1000)
+
+fitted_exg <- model_exgauss %>%
+  add_fitted_draws(newdata = df_exgauss, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_exgauss <- ggplot(df_exgauss, aes(x, y)) +
-  geom_point() +
+  geom_point(alpha = 0.6) +
+  geom_line(data = fitted_exg, aes(x, pred), color = "red") +
   ggtitle("ExGaussian Regression")
 save_plot(plot_exgauss, "exgaussian")
+```
 
-# 6. Ordered Logistic (Likert Data)
+### 6. Ordered Logistic Regression
+
+```{r ordered-logistic}
 df_ordinal <- tibble(x = rnorm(100)) %>%
   mutate(score = cut_number(x + rnorm(100), n = 5, labels = FALSE))
 
 model_ordinal <- brm(score ~ x, family = cumulative(), data = df_ordinal, chains = 2, iter = 1000)
+
+fitted_ord <- model_ordinal %>%
+  add_fitted_draws(newdata = df_ordinal, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_ordinal <- ggplot(df_ordinal, aes(x, score)) +
-  geom_jitter(height = 0.2) +
+  geom_jitter(height = 0.2, color = "black", alpha = 0.5) +
+  geom_line(data = fitted_ord, aes(x, pred), color = "red") +
   ggtitle("Ordered Logistic Regression")
 save_plot(plot_ordinal, "ordered_logistic")
+```
 
-# 7. Beta Regression (Proportion Rating)
+### 7. Beta Regression
+
+```{r beta}
 df_beta <- tibble(x = rnorm(100)) %>%
   mutate(p = plogis(0.5 * x),
          y = rbeta(100, shape1 = p * 10, shape2 = (1 - p) * 10))
 
 model_beta <- brm(y ~ x, family = Beta(), data = df_beta, chains = 2, iter = 1000)
+
+fitted_beta <- model_beta %>%
+  add_fitted_draws(newdata = df_beta, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_beta <- ggplot(df_beta, aes(x, y)) +
-  geom_point() +
+  geom_point(alpha = 0.6) +
+  geom_line(data = fitted_beta, aes(x, pred), color = "red") +
   ggtitle("Beta Regression")
 save_plot(plot_beta, "beta")
+```
 
-# 8. Distributional Regression (Model Mean + Variance)
+### 8. Distributional Regression
+
+```{r distributional}
 df_dist <- tibble(x = rnorm(100)) %>%
   mutate(sd = 0.5 + 0.3 * abs(x),
          y = rnorm(100, mean = 2 + x, sd = sd))
 
 model_dist <- brm(bf(y ~ x, sigma ~ x), data = df_dist, chains = 2, iter = 1000)
+
+fitted_dist <- model_dist %>%
+  add_fitted_draws(newdata = df_dist, re_formula = NA) %>%
+  group_by(x) %>%
+  summarise(pred = mean(.value))
+
 plot_dist <- ggplot(df_dist, aes(x, y)) +
-  geom_point() +
-  ggtitle("Distributional Regression (Mean + Variance)")
+  geom_point(alpha = 0.6) +
+  geom_line(data = fitted_dist, aes(x, pred), color = "red") +
+  ggtitle("Distributional Regression (Mean + Variance")
 save_plot(plot_dist, "distributional")
-
 ```
-
